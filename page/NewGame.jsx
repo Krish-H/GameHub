@@ -5,6 +5,11 @@ import pic2 from "../src/assets/images/pic2.jpeg";
 import pic3 from "../src/assets/images/pic3.jpeg";
 import pic4 from "../src/assets/images/pic4.jpeg";
 
+// Import sound effects
+import correctSound from "../src/assets/sounds/correct.mp3";
+import wrongSound from "../src/assets/sounds/wrong.mp3";
+import gameOverSound from "../src/assets/sounds/gameover.mp3";
+
 const roles = ["Raja", "Rani", "Police", "Thief"];
 const players = ["You", "Bot 1", "Bot 2", "Bot 3"];
 
@@ -44,6 +49,7 @@ const NewGame = () => {
   const [guessing, setGuessing] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [winner, setWinner] = useState("");
+  const [blockedPairs, setBlockedPairs] = useState([]);
 
   const startRound = () => {
     const shuffled = [...roles].sort(() => Math.random() - 0.5);
@@ -52,6 +58,7 @@ const NewGame = () => {
     setRolesAssigned(newRoles);
     setFlipped({});
     setActivePlayers([...players]);
+    setBlockedPairs([]);
     const rajaPlayer = Object.keys(newRoles).find((p) => newRoles[p] === "Raja");
     setTurn(rajaPlayer);
     setMessage(`🎮 Round ${round} started! ${rajaPlayer} (Raja) begins.`);
@@ -67,14 +74,20 @@ const NewGame = () => {
       setGuessing(true);
       setMessage(`${turn} is thinking... 🤔`);
       const timer = setTimeout(() => {
-        const possible = activePlayers.filter((p) => p !== turn);
+        const possible = activePlayers.filter(
+          (p) => p !== turn && !blockedPairs.includes([turn, p].sort().join("-"))
+        );
+        if (possible.length === 0) {
+          endRound();
+          return;
+        }
         const guess = possible[Math.floor(Math.random() * possible.length)];
         handleGuess(turn, guess);
         setGuessing(false);
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [turn, activePlayers]);
+  }, [turn, activePlayers, blockedPairs]);
 
   const updateScore = (player, role) => {
     setScores((prev) => ({ ...prev, [player]: prev[player] + points[role] }));
@@ -89,6 +102,7 @@ const NewGame = () => {
     if (!targetRole) {
       setMessage(`💀 ${guesser} got the Thief! Round ends.`);
       setFlipped({ ...rolesAssigned });
+      new Audio(gameOverSound).play();
       endRound();
       return;
     }
@@ -99,6 +113,7 @@ const NewGame = () => {
       updateScore(targetPlayer, targetRole);
       setFlipped((prev) => ({ ...prev, [targetPlayer]: true }));
       setActivePlayers((prev) => prev.filter((p) => p !== guesser));
+      new Audio(correctSound).play();
 
       const remaining = activePlayers.filter((p) => p !== guesser);
       if (remaining.length === 0) {
@@ -112,10 +127,15 @@ const NewGame = () => {
       );
       setRolesAssigned((prev) => {
         const newRoles = { ...prev };
-        [newRoles[guesser], newRoles[targetPlayer]] = [newRoles[targetPlayer], newRoles[guesser]];
+        [newRoles[guesser], newRoles[targetPlayer]] = [
+          newRoles[targetPlayer],
+          newRoles[guesser],
+        ];
         return newRoles;
       });
+      setBlockedPairs((prev) => [...prev, [guesser, targetPlayer].sort().join("-")]);
       setTurn(targetPlayer);
+      new Audio(wrongSound).play();
     }
   };
 
@@ -128,7 +148,7 @@ const NewGame = () => {
         setMessage("🏆 Game Over! Final Scores:");
         setTurn(null);
         setFlipped({ ...rolesAssigned });
-
+        new Audio(gameOverSound).play();
         const maxScore = Math.max(...Object.values(scores));
         const winners = Object.keys(scores).filter((p) => scores[p] === maxScore);
         setWinner(winners.join(", "));
@@ -148,8 +168,6 @@ const NewGame = () => {
   return (
     <div className="flex flex-col items-center min-h-screen p-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white">
       {gameOver && <Confetti />}
-
-      {/* Winner on top */}
       {gameOver && (
         <p className="text-2xl font-bold text-yellow-300 mb-4 text-center">
           🏅 Winner: {winner} 🎉
@@ -159,13 +177,16 @@ const NewGame = () => {
       <h1 className="text-3xl font-bold mb-4 text-center">Raja Rani Police Thief 🎭</h1>
       <p className="mb-6 text-center px-2">{message}</p>
 
-      {/* Player Cards - 2 column grid always */}
+      {/* Player Cards */}
       <div className="grid grid-cols-2 gap-4 mb-6 w-full max-w-md">
         {players.map((p, i) => (
           <div
             key={i}
             onClick={() =>
-              turn === "You" && p !== "You" && activePlayers.includes("You")
+              turn === "You" &&
+              p !== "You" &&
+              activePlayers.includes("You") &&
+              !blockedPairs.includes(["You", p].sort().join("-"))
                 ? handleGuess("You", p)
                 : null
             }
